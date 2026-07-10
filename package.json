@@ -1,0 +1,20 @@
+{
+  "name": "budget-bunny",
+  "private": true,
+  "scripts": {
+    "sheet:login": "clasp login",
+    "sheet:push": "cd sheets && clasp push --force",
+    "sheet:pull": "cd sheets && clasp pull",
+    "sheet:open-script": "cd sheets && clasp open",
+    "sheet:deployments": "cd sheets && clasp deployments",
+    "sheet:version": "cd sheets && clasp version \"Budget-Bunny update\"",
+    "cli": "node cli/index.js"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.5.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "openai": "^4.73.0"
+  }
+}

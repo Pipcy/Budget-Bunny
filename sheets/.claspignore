@@ -1,0 +1,4 @@
+# Ignore repo docs in sheets/ (script files live in apps-script/ via rootDir)
+README.md
+API.md
+.clasp.json.example

@@ -1,122 +1,160 @@
-# Budget-Flow — Google Sheet setup
+# Budget-Bunny — Google Sheet setup
 
-Follow these steps in order. Total time: ~15 minutes.
+## Sync script from this repo (recommended)
 
-## Step 1: Create the spreadsheet
+Use **[clasp](https://github.com/google/clasp)** — Google's CLI — to push local files to your sheet's Apps Script instead of copy-pasting.
 
-1. Open [Google Sheets](https://sheets.google.com)
-2. **Blank spreadsheet**
-3. Rename it **Budget-Flow**
+### One-time setup
 
-## Step 2: Paste Apps Script
-
-1. In the sheet: **Extensions → Apps Script**
-2. Rename the project **Budget-Flow**
-3. Remove the default `Code.gs` contents
-4. Create **four** script files and paste from this repo:
-
-| Apps Script file | Copy from |
-|------------------|-----------|
-| `Code.gs` | `sheets/apps-script/Code.gs` |
-| `Setup.gs` | `sheets/apps-script/Setup.gs` |
-| `Auth.gs` | `sheets/apps-script/Auth.gs` |
-| `appsscript.json` | Project settings → paste `sheets/apps-script/appsscript.json` |
-
-5. **Save** (Ctrl+S)
-
-## Step 3: Run setup
-
-1. In the function dropdown, select **`setupWorkbook`**
-2. Click **Run**
-3. **Review permissions** → choose your Google account → Advanced → Allow
-4. When prompted, click OK on “Setup complete”
-5. Switch back to the spreadsheet — you should see 9 tabs including **Dashboard** and **Settings**
-
-## Step 4: Customize your budget
-
-1. **Categories** — edit names, monthly budgets, groups (Needs / Wants / Savings)
-2. **BudgetGuide** — how to split income after payday (% or Fixed)
-3. **Dashboard** — cell **B3** = current month (`2026-06`)
-
-## Step 5: Try sample data (optional)
-
-1. Reload the spreadsheet
-2. Menu: **Budget-Flow → Add sample data**
-3. Check **Dashboard** and **MonthlySummary**
-
-## Step 6: Deploy web app (for iPhone later)
-
-1. Apps Script editor → **Deploy → New deployment**
-2. Type: **Web app**
-3. Settings:
-   - **Execute as:** Me
-   - **Who has access:** Anyone
-4. **Deploy** → copy the **Web app URL** (ends in `/exec`)
-5. Paste URL into **Settings** tab cell **B3** in your sheet
-
-## Step 7: Generate API token
-
-1. Reload spreadsheet
-2. Menu: **Budget-Flow → Generate API token**
-3. Copy the token — save for your iPhone app
-4. Token is also stored on **Settings** tab cell **B4**
-
-## Step 8: Test the API
-
-1. Menu: **Budget-Flow → Test API (getCategories)**
-2. You should see JSON with your categories
-
-Or test from PowerShell (replace URL and token):
+1. **Install Node.js** if you don't have it, then from the project root:
 
 ```powershell
-$body = @{
-  token  = "YOUR_TOKEN_HERE"
-  action = "getCategories"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Uri "YOUR_WEB_APP_URL" -Method Post -Body $body -ContentType "application/json"
+cd c:\Projects\Budget-Flow
+npm install
+npm run sheet:login
 ```
+
+Browser opens → sign in with the Google account that owns your sheet.
+
+2. **Get your Script ID** from Apps Script (Extensions → Apps Script in your sheet).  
+   URL looks like: `https://script.google.com/home/projects/SCRIPT_ID_HERE/edit`
+
+3. **Link the repo:**
+
+```powershell
+copy sheets\.clasp.json.example sheets\.clasp.json
+```
+
+Edit `sheets/.clasp.json` and replace `PASTE_YOUR_SCRIPT_ID_HERE` with your Script ID.
+
+4. **Push code to Google:**
+
+```powershell
+npm run sheet:push
+```
+
+5. In Apps Script (or reload the sheet), run **`setupWorkbook`** once if this is a fresh sheet.
+
+### Day-to-day workflow
+
+| You edit… | Then run… |
+|-----------|-----------|
+| Files in `sheets/apps-script/` | `npm run sheet:push` |
+| Want to pull changes made in Google's editor | `npm run sheet:pull` |
+| Open Apps Script in browser | `npm run sheet:open-script` |
+
+After `sheet:push`, create a **new deployment version** if you already deployed the web app (Deploy → Manage deployments → Edit → New version).
+
+**Important:** `sheet:push` updates the script editor only. Your `/exec` URL is tied to a **deployment version**. If the CLI returns `Unknown action` after a push, your `.env` URL is probably on an old version.
+
+```powershell
+npm run sheet:deployments
+```
+
+Look for `@3` (or highest number). Either:
+- Update `APPS_SCRIPT_URL` in `.env` to that deployment's URL, **or**
+- Apps Script → Deploy → Manage deployments → Edit → Version → pick latest → Deploy (keeps same URL)
+
+Check which version is live: open `/exec` in browser — should show `"version":"1.2"` not `"1.0"`.
+
+> `sheets/.clasp.json` is gitignored — each person/sheet has its own Script ID.
+
+### New sheet from scratch (alternative)
+
+If you haven't created Apps Script yet:
+
+```powershell
+cd sheets
+clasp create --type sheets --title "Budget-Bunny" --parentId YOUR_SPREADSHEET_ID --rootDir apps-script
+```
+
+Spreadsheet ID is in the sheet URL:  
+`https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit`
+
+Then `npm run sheet:push` from the project root.
 
 ---
 
-## Tabs reference
+## Manual setup (without clasp)
 
+1. Create a Google Sheet → **Extensions → Apps Script**
+2. Paste files from `sheets/apps-script/` by hand
+3. Run **`setupWorkbook`**
+
+---
+
+## Data model
 | Tab | Purpose |
 |-----|---------|
-| **Dashboard** | Month picker, income/spent/net, over-budget list |
-| **Categories** | Budget categories and monthly limits |
-| **Transactions** | One row per payment |
-| **Splits** | Category breakdown per payment |
-| **Ledger** | Auto-generated (do not edit) |
-| **Income** | Paychecks, Zelle in, etc. |
-| **BudgetGuide** | Post-income allocation rules |
-| **MonthlySummary** | Budget vs spent per category |
-| **Settings** | Web app URL + API token reference |
+| **Categories** | Main categories only (Rent, Groceries, Dining…) |
+| **Subcategories** | Optional detail under a main category (Costco → Groceries) |
+| **BudgetGuide** | Budget rules for **Main** or **Sub** targets |
+| **Transactions / Splits** | Payments; splits use main + optional sub |
+| **Ledger** | Auto-generated flat view |
+| **MonthlySummary** | Main category budget vs spent (subs roll up) |
+| **SubcategorySummary** | Subcategory budget vs spent |
+| **Dashboard** | Month picker + totals |
 
-## Manual logging (until iPhone app exists)
+### BudgetGuide columns
 
-In Apps Script, run from the editor:
+| Column | Meaning |
+|--------|---------|
+| **Budget For** | Name of the main category or subcategory |
+| **For Type** | `Main` or `Sub` |
+| **Rule Type** | See below |
+| **Value** | Dollar amount or percent |
+| **Priority** | Order for income allocation notes |
+
+**Rule types:**
+
+| Rule Type | Used for |
+|-----------|----------|
+| `Monthly` | Monthly spending cap (shows in Summary tabs) |
+| `Income Fixed` | Fixed $ to allocate when income is logged |
+| `Income Percent` | % of income to allocate when income is logged |
+
+Example: Groceries can have a **Main · Monthly** cap of $400 while **Costco** has a **Sub · Monthly** cap of $250. Sub spending also rolls up into the main category total.
+
+---
+
+## Setup steps
+
+See previous steps 1–8 in this file. After pasting Apps Script, run **`setupWorkbook`**.
+
+> **Already customized your sheet?** Updating Apps Script and re-running `setupWorkbook` **clears all tabs**. Export or copy your categories first, then paste back after setup.
+
+### Customize
+
+1. **Categories** — main categories (no budget column; budgets live in BudgetGuide)
+2. **Subcategories** — add subs; **Parent Category** must match Categories exactly
+3. **BudgetGuide** — set `Monthly` caps and/or income rules for Main or Sub
+4. **Dashboard B3** — current month (`YYYY-MM`)
+
+### Log a split with subcategory
 
 ```javascript
 addTransaction({
   date: '2026-06-10',
-  merchant: 'Coffee Shop',
-  amount: 12,
-  paymentMethod: 'Cash',
+  merchant: 'Costco',
+  amount: 45,
+  paymentMethod: 'Card',
   source: 'manual',
-  splits: [{ category: 'Dining', amount: 12 }],
+  splits: [{ category: 'Groceries', subcategory: 'Costco', amount: 45 }],
 });
 ```
 
-Full API contract: see [API.md](./API.md).
+Main-only split (no sub):
+
+```javascript
+splits: [{ category: 'Rent', amount: 1500 }]
+```
+
+Full API: [API.md](./API.md)
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| `setupWorkbook` not in dropdown | Save all `.gs` files; refresh Apps Script page |
-| Permission denied | Re-run and complete Google authorization |
-| Ledger shows `#N/A` | Transaction ID in Splits must exist in Transactions |
-| Category rejected | Name must match **Categories** tab exactly (case-sensitive) |
-| API returns `Invalid API token` | Regenerate token; include `"token"` in every POST body |
-| POST returns HTML login page | Deploy as **Anyone**; use `/exec` URL not `/dev` |
+| Sub rejected | Subcategory must exist under that parent on **Subcategories** |
+| Budget shows $0 | Add a **Monthly** row in BudgetGuide for that Main or Sub |
+| Main spent includes subs | By design — sub spending rolls up to the main category |

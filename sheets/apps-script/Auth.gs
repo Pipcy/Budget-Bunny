@@ -25,7 +25,7 @@ function getApiToken_() {
 function verifyToken_(payload) {
   const expected = getApiToken_();
   if (!expected) {
-    throw new Error('No API token set. Run Budget-Flow → Generate API token first.');
+    throw new Error('No API token set. Run Budget-Bunny → Generate API token first.');
   }
   if (!payload || payload.token !== expected) {
     throw new Error('Invalid API token');
