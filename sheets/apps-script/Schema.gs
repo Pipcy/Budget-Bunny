@@ -5,12 +5,69 @@
 const TX_COL = { ID: 1, TX_TIME: 2, LOG_TIME: 3, MERCHANT: 4, AMOUNT: 5, PAYMENT: 6, NOTES: 7, RECEIPT: 8, SOURCE: 9 };
 const SPLIT_COL = { TX_ID: 1, MAIN: 2, SUB: 3, MERCHANT: 4, AMOUNT: 5, REIMBURSE: 6, NOTES: 7, TX_TIME: 8, LOG_TIME: 9 };
 const NOT_SPECIFIED_MERCHANT = 'Not specified';
-const INCOME_COL = { TX_TIME: 1, LOG_TIME: 2, AMOUNT: 3, SOURCE: 4, NOTES: 5, APPLY_GUIDE: 6 };
 
 function ensureAllSchemas_(ss) {
   ensureTransactionsSchema_(ss);
   ensureSplitsSchema_(ss);
-  ensureIncomeSchema_(ss);
+  ensureCategoryContextSchemas_(ss);
+  ensureOtherCategory_(ss);
+}
+
+/** Adds Context columns on Categories / Subcategories if missing. */
+function ensureCategoryContextSchemas_(ss) {
+  const catSheet = ss.getSheetByName(SHEET_NAMES.CATEGORIES);
+  if (catSheet) {
+    const headers = headerRow_(catSheet);
+    if (headers.indexOf('Context') === -1) {
+      // Prefer before Active: Category | Group | Color | Context | Active
+      const activeIdx = headers.indexOf('Active');
+      if (activeIdx >= 0) {
+        catSheet.insertColumnBefore(activeIdx + 1);
+        catSheet.getRange(1, activeIdx + 1).setValue('Context');
+      } else {
+        const col = Math.max(headers.length, 1) + 1;
+        catSheet.getRange(1, col).setValue('Context');
+      }
+    }
+  }
+
+  const subSheet = ss.getSheetByName(SHEET_NAMES.SUBCATEGORIES);
+  if (subSheet) {
+    const headers = headerRow_(subSheet);
+    if (headers.indexOf('Context') === -1) {
+      // Prefer before Active: Subcategory | Parent Category | Context | Active
+      const activeIdx = headers.indexOf('Active');
+      if (activeIdx >= 0) {
+        subSheet.insertColumnBefore(activeIdx + 1);
+        subSheet.getRange(1, activeIdx + 1).setValue('Context');
+      } else {
+        const col = Math.max(headers.length, 1) + 1;
+        subSheet.getRange(1, col).setValue('Context');
+      }
+    }
+  }
+}
+
+/** Ensures an "Other" catch-all main category exists (for LLM fallback). */
+function ensureOtherCategory_(ss) {
+  const sheet = ss.getSheetByName(SHEET_NAMES.CATEGORIES);
+  if (!sheet) return;
+
+  ensureCategoryContextSchemas_(ss);
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    sheet.appendRow(['Other', 'Needs', '#9E9E9E', 'Catch-all when category is unclear', 'TRUE']);
+    return;
+  }
+
+  const names = sheet
+    .getRange(2, 1, lastRow - 1, 1)
+    .getValues()
+    .map((row) => String(row[0] || '').trim());
+  if (names.includes('Other')) return;
+
+  sheet.appendRow(['Other', 'Needs', '#9E9E9E', 'Catch-all when category is unclear', 'TRUE']);
 }
 
 function headerRow_(sheet) {
@@ -119,27 +176,6 @@ function migrateExcludeColumn_(sheet) {
       sheet.getRange(r, 5).setValue('Paid');
     } else {
       sheet.getRange(r, 5).setValue('');
-    }
-  }
-}
-
-function ensureIncomeSchema_(ss) {
-  const sheet = ss.getSheetByName(SHEET_NAMES.INCOME);
-  if (!sheet) return;
-
-  const headers = headerRow_(sheet);
-  if (headers[0] === 'Transaction Time') return;
-
-  if (headers[0] === 'Date') {
-    sheet.getRange(1, 1).setValue('Transaction Time');
-    sheet.insertColumnAfter(1);
-    sheet.getRange(1, 2).setValue('Log Time');
-    const lastRow = sheet.getLastRow();
-    if (lastRow > 1) {
-      for (let r = 2; r <= lastRow; r++) {
-        const txTime = sheet.getRange(r, 1).getValue();
-        sheet.getRange(r, 2).setValue(txTime || now_());
-      }
     }
   }
 }

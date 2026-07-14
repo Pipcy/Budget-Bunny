@@ -55,7 +55,7 @@ Look for `@3` (or highest number). Either:
 - Update `APPS_SCRIPT_URL` in `.env` to that deployment's URL, **or**
 - Apps Script → Deploy → Manage deployments → Edit → Version → pick latest → Deploy (keeps same URL)
 
-Check which version is live: open `/exec` in browser — should show `"version":"1.2"` not `"1.0"`.
+Check which version is live: open `/exec` in browser — should show `"version":"1.5"` (or newer).
 
 > `sheets/.clasp.json` is gitignored — each person/sheet has its own Script ID.
 
@@ -86,34 +86,12 @@ Then `npm run sheet:push` from the project root.
 ## Data model
 | Tab | Purpose |
 |-----|---------|
-| **Categories** | Main categories only (Rent, Groceries, Dining…) |
-| **Subcategories** | Optional detail under a main category (Costco → Groceries) |
-| **BudgetGuide** | Budget rules for **Main** or **Sub** targets |
+| **Categories** | Main categories (+ **Context** for LLM) |
+| **Subcategories** | Optional detail under a main category (+ **Context**) |
 | **Transactions / Splits** | Payments; splits use main + optional sub |
 | **Ledger** | Auto-generated flat view |
-| **MonthlySummary** | Main category budget vs spent (subs roll up) |
-| **SubcategorySummary** | Subcategory budget vs spent |
-| **Dashboard** | Month picker + totals |
-
-### BudgetGuide columns
-
-| Column | Meaning |
-|--------|---------|
-| **Budget For** | Name of the main category or subcategory |
-| **For Type** | `Main` or `Sub` |
-| **Rule Type** | See below |
-| **Value** | Dollar amount or percent |
-| **Priority** | Order for income allocation notes |
-
-**Rule types:**
-
-| Rule Type | Used for |
-|-----------|----------|
-| `Monthly` | Monthly spending cap (shows in Summary tabs) |
-| `Income Fixed` | Fixed $ to allocate when income is logged |
-| `Income Percent` | % of income to allocate when income is logged |
-
-Example: Groceries can have a **Main · Monthly** cap of $400 while **Costco** has a **Sub · Monthly** cap of $250. Sub spending also rolls up into the main category total.
+| **MonthlySummary** | Spent per main category (SUM from **Splits**) |
+| **Dashboard** | Month picker + total spent |
 
 ---
 
@@ -122,13 +100,14 @@ Example: Groceries can have a **Main · Monthly** cap of $400 while **Costco** h
 See previous steps 1–8 in this file. After pasting Apps Script, run **`setupWorkbook`**.
 
 > **Already customized your sheet?** Updating Apps Script and re-running `setupWorkbook` **clears all tabs**. Export or copy your categories first, then paste back after setup.
+>
+> Running **Setup workbook** or **Refresh report formulas** also deletes obsolete tabs **Income**, **BudgetGuide**, and **SubcategorySummary** if they still exist.
 
 ### Customize
 
-1. **Categories** — main categories (no budget column; budgets live in BudgetGuide)
-2. **Subcategories** — add subs; **Parent Category** must match Categories exactly
-3. **BudgetGuide** — set `Monthly` caps and/or income rules for Main or Sub
-4. **Dashboard B3** — current month (`YYYY-MM`)
+1. **Categories** — main categories + Context (helps the LLM)
+2. **Subcategories** — Parent Category must match Categories exactly
+3. **Dashboard B3** — current month (`YYYY-MM`)
 
 ### Log a split with subcategory
 
@@ -156,5 +135,5 @@ Full API: [API.md](./API.md)
 | Problem | Fix |
 |---------|-----|
 | Sub rejected | Subcategory must exist under that parent on **Subcategories** |
-| Budget shows $0 | Add a **Monthly** row in BudgetGuide for that Main or Sub |
-| Main spent includes subs | By design — sub spending rolls up to the main category |
+| MonthlySummary Spent is 0 | Menu → **Refresh report formulas**; confirm Splits have Transaction Time and Dashboard B3 month |
+| Main spent includes subs | By design — all splits under that Main Category sum together |

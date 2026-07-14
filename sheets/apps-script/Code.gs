@@ -1,5 +1,5 @@
 /**
- * Budget-Bunny — transaction and income API
+ * Budget-Bunny — transaction API
  */
 
 function onOpen() {
@@ -78,75 +78,32 @@ function addTransaction_(data) {
   return { id, success: true };
 }
 
-function addIncome(data) {
-  return addIncome_(data);
-}
-
-function addIncome_(data) {
-  if (data.amount == null) {
-    throw new Error('Income requires amount');
-  }
-
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  ensureAllSchemas_(ss);
-  const sheet = ss.getSheetByName(SHEET_NAMES.INCOME);
-
-  const logTime = now_();
-  const transactionTime = resolveTransactionTime_(data, logTime);
-
-  sheet.appendRow([
-    transactionTime,
-    logTime,
-    Number(data.amount),
-    data.source || 'Other',
-    data.notes || '',
-    data.applyBudgetGuide ? 'TRUE' : 'FALSE',
-  ]);
-
-  if (data.applyBudgetGuide) {
-    applyBudgetGuide_(Number(data.amount));
-  }
-
-  return { success: true };
-}
-
 function getBalances() {
-  return {
-    main: readSummarySheet_(SHEET_NAMES.MONTHLY_SUMMARY, 'main'),
-    sub: readSummarySheet_(SHEET_NAMES.SUBCATEGORY_SUMMARY, 'sub'),
-  };
-}
-
-function readSummarySheet_(sheetName, level) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const summary = ss.getSheetByName(sheetName);
-  const lastRow = summary.getLastRow();
-  if (lastRow < 2) return [];
+  const summary = ss.getSheetByName(SHEET_NAMES.MONTHLY_SUMMARY);
+  if (!summary) return { balances: [] };
 
-  const values = summary.getRange(2, 2, lastRow - 1, 5).getValues();
-  return values
+  const lastRow = summary.getLastRow();
+  if (lastRow < 2) return { balances: [] };
+
+  // B=Main Category, C=Group, D=Spent
+  const values = summary.getRange(2, 2, lastRow - 1, 3).getValues();
+  const balances = values
     .filter((row) => row[0])
-    .map((row) => {
-      if (level === 'sub') {
-        return {
-          subcategory: row[0],
-          parentCategory: row[1],
-          budget: row[2],
-          spent: row[3],
-          remaining: row[4],
-        };
-      }
-      return {
-        category: row[0],
-        group: row[1],
-        budget: row[2],
-        spent: row[3],
-        remaining: row[4],
-      };
-    });
+    .map((row) => ({
+      category: String(row[0]),
+      group: String(row[1] || ''),
+      spent: Number(row[2]) || 0,
+    }));
+
+  return { balances };
 }
 
 function getCategories() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureCategoryContextSchemas_(ss);
+  ensureOtherCategory_(ss);
+
   const mains = getMainCategories_();
   const subs = getSubcategoryRows_();
 
@@ -154,9 +111,13 @@ function getCategories() {
     name: main.name,
     group: main.group,
     color: main.color,
+    context: main.context || '',
     subcategories: subs
       .filter((s) => s.parentCategory === main.name)
-      .map((s) => s.name),
+      .map((s) => ({
+        name: s.name,
+        context: s.context || '',
+      })),
   }));
 }
 
@@ -166,14 +127,23 @@ function getMainCategories_() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
+  const headers = headerRow_(sheet);
+  const nameCol = colIndex_(headers, 'Category', 0);
+  const groupCol = colIndex_(headers, 'Group', 1);
+  const colorCol = colIndex_(headers, 'Color', 2);
+  const contextCol = colIndex_(headers, 'Context', 3);
+  const activeCol = colIndex_(headers, 'Active', 4);
+  const width = Math.max(nameCol, groupCol, colorCol, contextCol, activeCol) + 1;
+
   return sheet
-    .getRange(2, 1, lastRow - 1, 4)
+    .getRange(2, 1, lastRow - 1, width)
     .getValues()
-    .filter((row) => row[0] && isActive_(row[3]))
+    .filter((row) => row[nameCol] && isActive_(row[activeCol]))
     .map((row) => ({
-      name: String(row[0]),
-      group: String(row[1]),
-      color: String(row[2] || ''),
+      name: String(row[nameCol]),
+      group: String(row[groupCol] || ''),
+      color: String(row[colorCol] || ''),
+      context: String(row[contextCol] || ''),
     }));
 }
 
@@ -183,13 +153,21 @@ function getSubcategoryRows_() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
+  const headers = headerRow_(sheet);
+  const nameCol = colIndex_(headers, 'Subcategory', 0);
+  const parentCol = colIndex_(headers, 'Parent Category', 1);
+  const contextCol = colIndex_(headers, 'Context', 2);
+  const activeCol = colIndex_(headers, 'Active', 3);
+  const width = Math.max(nameCol, parentCol, contextCol, activeCol) + 1;
+
   return sheet
-    .getRange(2, 1, lastRow - 1, 3)
+    .getRange(2, 1, lastRow - 1, width)
     .getValues()
-    .filter((row) => row[0] && isActive_(row[2]))
+    .filter((row) => row[nameCol] && isActive_(row[activeCol]))
     .map((row) => ({
-      name: String(row[0]),
-      parentCategory: String(row[1]),
+      name: String(row[nameCol]),
+      parentCategory: String(row[parentCol] || ''),
+      context: String(row[contextCol] || ''),
     }));
 }
 
@@ -202,57 +180,19 @@ function getSubcategoryMap_() {
   return map;
 }
 
+function colIndex_(headers, name, fallback) {
+  const idx = headers.indexOf(name);
+  return idx >= 0 ? idx : fallback;
+}
+
 function isActive_(value) {
   return value === true || String(value).toUpperCase() === 'TRUE';
 }
 
 function showBalances() {
-  const { main, sub } = getBalances();
-  const mainLines = main.map(
-    (b) =>
-      `[Main] ${b.category}: $${b.spent.toFixed(2)} / $${b.budget.toFixed(2)} (${b.remaining >= 0 ? '+' : ''}$${b.remaining.toFixed(2)})`
-  );
-  const subLines = sub
-    .filter((b) => b.budget > 0 || b.spent > 0)
-    .map(
-      (b) =>
-        `[Sub] ${b.subcategory} (${b.parentCategory}): $${b.spent.toFixed(2)} / $${b.budget.toFixed(2)}`
-    );
-  const lines = mainLines.concat(subLines);
+  const { balances } = getBalances();
+  const lines = balances.map((b) => `${b.category}: $${Number(b.spent).toFixed(2)}`);
   SpreadsheetApp.getUi().alert(lines.join('\n') || 'No data yet.');
-}
-
-function applyBudgetGuide_(incomeAmount) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const guide = ss.getSheetByName(SHEET_NAMES.BUDGET_GUIDE);
-  const lastRow = guide.getLastRow();
-  if (lastRow < 2) return;
-
-  const rules = guide.getRange(2, 1, lastRow - 1, 4).getValues();
-  const recs = [];
-
-  rules.forEach((row) => {
-    const [budgetFor, forType, ruleType, value] = row;
-    if (!budgetFor || !ruleType) return;
-    if (ruleType !== 'Income Fixed' && ruleType !== 'Income Percent') return;
-
-    let amount = 0;
-    if (ruleType === 'Income Fixed') {
-      amount = Number(value);
-    } else if (ruleType === 'Income Percent') {
-      amount = (Number(value) / 100) * incomeAmount;
-    }
-    recs.push(`${forType} · ${budgetFor}: $${amount.toFixed(2)}`);
-  });
-
-  recs.sort();
-
-  const incomeSheet = ss.getSheetByName(SHEET_NAMES.INCOME);
-  const lastIncomeRow = incomeSheet.getLastRow();
-  const existing = incomeSheet.getRange(lastIncomeRow, 4).getValue();
-  incomeSheet
-    .getRange(lastIncomeRow, 4)
-    .setValue((existing ? existing + '\n' : '') + 'Income allocation:\n' + recs.join('\n'));
 }
 
 function validateTransaction_(data) {
@@ -297,9 +237,6 @@ function doPost(e) {
     if (action === 'addTransaction') {
       return jsonResponse_(addTransaction(payload.data));
     }
-    if (action === 'addIncome') {
-      return jsonResponse_(addIncome(payload.data));
-    }
     if (action === 'getBalances') {
       return jsonResponse_(getBalances());
     }
@@ -332,7 +269,7 @@ function doPost(e) {
 }
 
 function doGet() {
-  return jsonResponse_({ status: 'ok', app: 'Budget-Bunny', version: '1.4' });
+  return jsonResponse_({ status: 'ok', app: 'Budget-Bunny', version: '1.5' });
 }
 
 function testApiGetCategories() {

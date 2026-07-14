@@ -29,18 +29,7 @@ function addSubcategory(data) {
   }
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.getSheetByName(SHEET_NAMES.SUBCATEGORIES).appendRow([name, parent, 'TRUE']);
-
-  if (data.monthlyBudget != null && Number(data.monthlyBudget) > 0) {
-    ss.getSheetByName(SHEET_NAMES.BUDGET_GUIDE).appendRow([
-      name,
-      'Sub',
-      'Monthly',
-      Number(data.monthlyBudget),
-      99,
-      'Added via app',
-    ]);
-  }
+  ss.getSheetByName(SHEET_NAMES.SUBCATEGORIES).appendRow([name, parent, '', 'TRUE']);
 
   return { success: true, created: true, subcategory: name, parentCategory: parent };
 }
@@ -146,7 +135,6 @@ function reclassifyByKeywords(data) {
   addSubcategory({
     parentCategory: data.parentCategory,
     subcategory: data.subcategory,
-    monthlyBudget: data.monthlyBudget,
   });
 
   const search = searchTransactions({

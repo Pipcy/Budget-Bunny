@@ -1,6 +1,6 @@
 # Budget-Bunny Sheet API
 
-Version **1.1** — main categories + subcategories + BudgetGuide targets.
+Version **1.5** — categories + subcategories; MonthlySummary spent from Splits.
 
 Every POST includes `"token": "your-api-token"`.
 
@@ -24,23 +24,30 @@ Every POST includes `"token": "your-api-token"`.
       "name": "Groceries",
       "group": "Needs",
       "color": "#50C878",
-      "subcategories": ["Costco", "Trader Joes"]
+      "context": "Food bought to cook at home",
+      "subcategories": [
+        { "name": "Costco", "context": "Costco / warehouse club grocery runs" },
+        { "name": "Trader Joes", "context": "Trader Joes grocery runs" }
+      ]
     },
     {
       "name": "Rent",
       "group": "Needs",
       "color": "#4A90D9",
+      "context": "Housing / rent payments",
       "subcategories": []
     }
   ]
 }
 ```
 
-Pass this structure to your Chat API so the model only uses valid main/sub names.
+`context` comes from the **Context** column on **Categories** / **Subcategories**. Pass it to the Chat API so the model knows what belongs in each bucket.
 
 ---
 
 ## getBalances
+
+Spent per main category for the month in Dashboard!B3 (from **MonthlySummary**, which SUMs **Splits**).
 
 ```json
 {
@@ -53,28 +60,17 @@ Pass this structure to your Chat API so the model only uses valid main/sub names
 
 ```json
 {
-  "main": [
+  "balances": [
     {
       "category": "Groceries",
       "group": "Needs",
-      "budget": 400,
-      "spent": 45,
-      "remaining": 355
-    }
-  ],
-  "sub": [
-    {
-      "subcategory": "Costco",
-      "parentCategory": "Groceries",
-      "budget": 250,
-      "spent": 45,
-      "remaining": 205
+      "spent": 45
     }
   ]
 }
 ```
 
-Budget amounts come from **BudgetGuide** rows where **Rule Type** = `Monthly`.
+Paid reimbursements are excluded from spent.
 
 ---
 
@@ -122,11 +118,7 @@ Budget amounts come from **BudgetGuide** rows where **Rule Type** = `Monthly`.
 ]
 ```
 
-**2. Friend pays back** — two commands:
-
-```json
-{ "action": "addIncome", "data": { "amount": 70, "source": "Zelle", "notes": "James — South Bay lunch" } }
-```
+**2. Friend pays back** — mark the pending split Paid:
 
 ```json
 {
@@ -154,27 +146,6 @@ Main-only example:
 
 ---
 
-## addIncome
-
-Unchanged. When `applyBudgetGuide: true`, only **Income Fixed** and **Income Percent** rows from BudgetGuide are used.
-
-```json
-{
-  "token": "...",
-  "action": "addIncome",
-  "data": {
-    "date": "2026-06-10",
-    "amount": 3200,
-    "source": "Paycheck",
-    "applyBudgetGuide": true
-  }
-}
-```
-
-Income notes will show lines like `Main · Groceries: $384.00`.
-
----
-
 ## addSubcategory
 
 Create a subcategory under a main category.
@@ -185,13 +156,10 @@ Create a subcategory under a main category.
   "action": "addSubcategory",
   "data": {
     "parentCategory": "Dining",
-    "subcategory": "Coffee",
-    "monthlyBudget": 60
+    "subcategory": "Coffee"
   }
 }
 ```
-
-`monthlyBudget` is optional — adds a **Sub · Monthly** row in BudgetGuide.
 
 ---
 
